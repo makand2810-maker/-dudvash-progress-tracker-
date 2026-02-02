@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Series Progress Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 10px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px; 
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { text-align: center; color: #667eea; margin-bottom: 5px; }
+        .target-info { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
+        
+        /* Sync Status */
+        .sync-status {
+            text-align: center;
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .sync-status.synced { background: #c6f6d5; color: #22543d; }
+        .sync-status.syncing { background: #fef3c7; color: #92400e; }
+        .sync-status.error { background: #fed7d7; color: #742a2a; }
+        .sync-status.offline { background: #e2e8f0; color: #2d3748; }
+        
+        /* Input Controls */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .input-group { display: flex; flex-direction: column; }
+        label { font-weight: 700; margin-bottom: 5px; color: #333; font-size: 15px;}
+        .sub-label { font-size: 10px; color: #777; font-weight: normal; }
+        input, select, button { padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; }
+        button { background: #667eea; color: white; border: none; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        button:hover { background: #5568d3; transform: translateY(-2px); }
+
+        .btn-group { display: flex; gap: 10px; margin-bottom: 25px; }
+        .btn-group button { flex: 1; padding: 12px; font-size: 14px;}
+
+        /* Leadership Board Boundaries */
+        .performance-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            margin-top: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 2px solid #cbd5e0;
+            overflow: hidden;
+        }
+        .board-column { padding: 15px; border-right: 2px solid #cbd5e0; }
+        .board-column:last-child { border-right: none; }
+        .board-column h3 { font-size: 14px; margin-bottom: 12px; color: #2d3748; text-align: center; text-transform: uppercase; font-weight: 700; }
+
+        #friendsList { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+        .friend-box-full {
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        .stat-card-leader {
+            background: white;
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            display: flex;
+            flex-direction: column;
+            border-left: 5px solid #ddd;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .stat-card-leader .name { font-weight: bold; color: #2d3748; font-size: 13px; }
+        .stat-card-leader .val { font-size: 11px; color: #718096; }
+
+        #chartContainer { position: relative; height: 90vh; margin-top: 30px; border: 1px solid #eee; border-radius: 8px; padding: 10px; }
+
+        /* Change Log */
+        .changelog-section {
+            margin-top: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            border: 2px solid #cbd5e0;
+        }
+        .changelog-section h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #2d3748;
+            font-weight: 700;
+        }
+        .changelog-item {
+            background: white;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            font-size: 12px;
+            color: #4a5568;
+        }
+        .changelog-time {
+            font-size: 10px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+
+        .import-export-section {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .import-export-section button {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            background: #48bb78;
+        }
+
+        /* Modals - Centered and Fixed */
+        .modal { 
+            display: none; 
+            position: fixed; 
+            z-index: 9999; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            justify-content: center; 
+            align-items: center;
+        }
+        .modal-content { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 15px; 
+            width: 90%; 
+            max-width: 750px; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); 
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header { font-size: 1.2rem; font-weight: bold; color: #667eea; margin-bottom: 15px; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-buttons button { flex: 1; padding: 12px; border-radius: 8px; }
+
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .details-table th, .details-table td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 12px; }
+        .details-table th { cursor: pointer; background: #f7fafc; user-select: none; }
+        .details-table th:hover { background: #edf2f7; }
+        .sort-indicator { font-size: 10px; margin-left: 4px; }
+        .hidden { display: none; }
+        .point-option { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; }
+        .point-option:hover { background: #f0f7ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 DUDVASH PROGRESS TRACKER</h1>
+        <div class="target-info">Target: Rank 1500 | Competitors Scale: 0 - 20,000 (20k < fail)</div>
+        
+        <!-- Sync Status -->
+        <div id="syncStatus" class="sync-status offline">⚙️ Configuring sync...</div>
+        
+        <div class="controls">
+            <div class="input-group">
+                <label>Friend Name</label>
+                <input type="text" id="friendName" list="friendNameList" placeholder="Type name or select...">
+                <datalist id="friendNameList"></datalist>
+            </div>
+            <div class="input-group">
+                <label>Subject</label>
+                <select id="subject">
+                    <option value="Math 1st">Math 1st</option><option value="Math 2nd">Math 2nd</option>
+                    <option value="Phy 1st">Phy 1st</option><option value="Phy 2nd">Phy 2nd</option>
+                    <option value="Chem 1st">Chem 1st</option><option value="Chem 2nd">Chem 2nd</option>
+                    <option value="Botany">Botany</option><option value="Zoology">Zoology</option>
+                    <option value="Eng 1st">Eng 1st</option><option value="Eng 2nd">Eng 2nd</option>
+                    <option value="B1">B1</option><option value="B2">B2</option><option value="ICT">ICT</option>
+                </select>
+            </div>
+            <div class="input-group"><label>Test Date</label><input type="date" id="testDate"></div>
+            <div class="input-group"><label>Rank</label><input type="number" id="rank" placeholder="e.g. 2500"></div>
+            <div class="input-group"><label>CQ Marks</label><input type="number" id="cqMarks" placeholder="out of 30"></div>
+            <div class="input-group"><label>MCQ Marks</label><input type="number" id="mcqMarks" placeholder="out of 25"></div>
+        </div>
+
+        <div class="btn-group">
+            <button onclick="addData()" style="width: 100%; font-size: 16px; padding: 14px;">➕ Add a Point</button>
+        </div>
+
+        <div class="performance-section">
+            <div class="board-column"><h3>👥 Profiles</h3><div id="friendsList"></div></div>
+            <div class="board-column"><h3>🏆 Avg Rank</h3><div id="avgLeaderboard"></div></div>
+            <div class="board-column"><h3>⭐ Best Rank</h3><div id="bestLeaderboard"></div></div>
+        </div>
+        
+        <div id="chartContainer"><canvas id="myChart"></canvas></div>
+
+        <!-- Change Log Section -->
+        <div class="changelog-section">
+            <h3>📋 Change Log (Last 5 Changes)</h3>
+            <div id="changeLog"></div>
+            <div class="import-export-section">
+                <button onclick="exportData()">📤 Export Data</button>
+                <button onclick="document.getElementById('importFile').click()">📥 Import Data</button>
+                <button onclick="loadFromSheets()" style="background: #667eea;">🔄 Refresh from Cloud</button>
+                <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal" onclick="modalOutsideClick(event)">
+        <div class="modal-content">
+            <div class="modal-header">Edit Entry</div>
+            <div id="multiPointSelect" class="hidden">
+                <p style="margin-bottom: 10px; color: #666;">Multiple points found. Select one to edit:</p>
+                <div id="pointList"></div>
+            </div>
+            <div id="editFields" class="hidden">
+                <label style="font-size: 13px;">Name</label>
+                <input type="text" id="editName" disabled style="margin-bottom: 10px; background: #f5f5f5;">
+                <label style="font-size: 13px;">Subject</label>
+                <select id="editSubject" style="margin-bottom: 10px;">
+                    <option value="Math 1st">Math 1st</option><option value="Math 2nd">Math 2nd</option>
+                    <option value="Phy 1st">Phy 1st</option><option value="Phy 2nd">Phy 2nd</option>
+                    <option value="Chem 1st">Chem 1st</option><option value="Chem 2nd">Chem 2nd</option>
+                    <option value="Botany">Botany</option><option value="Zoology">Zoology</option>
+                    <option value="Eng 1st">Eng 1st</option><option value="Eng 2nd">Eng 2nd</option>
+                    <option value="B1">B1</option><option value="B2">B2</option><option value="ICT">ICT</option>
+                </select>
+                <label style="font-size: 13px;">Date</label>
+                <input type="date" id="editDate" style="margin-bottom: 10px;">
+                <label style="font-size: 13px;">Rank</label>
+                <input type="number" id="editRank" style="margin-bottom: 10px;">
+                <label style="font-size: 13px;">CQ Marks</label>
+                <input type="number" id="editCqMarks" placeholder="CQ Marks" style="margin-bottom: 10px;">
+                <label style="font-size: 13px;">MCQ Marks</label>
+                <input type="number" id="editMcqMarks" placeholder="MCQ Marks" style="margin-bottom: 10px;">
+                <div class="modal-buttons">
+                    <button onclick="saveEdit()" style="background: #48bb78;">Save</button>
+                    <button onclick="deleteEntry()" style="background: #f56565;">Delete</button>
+                    <button onclick="closeModal()" style="background: #a0aec0;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div id="detailsModal" class="modal" onclick="modalOutsideClick(event)">
+        <div class="modal-content">
+            <div class="modal-header" id="detailsPersonName"></div>
+            <div id="detailsContent"></div>
+            <div class="modal-buttons">
+                <button onclick="closeDetails()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== CONFIGURATION ==========
+        // PASTE YOUR GOOGLE SHEETS WEB APP URL HERE:
+        const SHEETS_API_URL = 'YOUR_WEB_APP_URL_HERE';
+        // ===================================
+
+        let allData = JSON.parse(localStorage.getItem('testData') || '{}');
+        let changeLog = JSON.parse(localStorage.getItem('changeLog') || '[]');
+        let chart = null;
+        let editingRef = null;
+        let currentSort = { column: null, ascending: true };
+        const colors = ['#24521e', '#FC5101', '#0ad2ff', '#591c4e', '#07276a', '#f08aa9', '#00ec3c'];
+        let isSyncing = false;
+
+        // Update sync status display
+        function updateSyncStatus(status, message) {
+            const statusDiv = document.getElementById('syncStatus');
+            statusDiv.className = 'sync-status ' + status;
+            statusDiv.innerHTML = message;
+        }
+
+        // Load data from Google Sheets
+        async function loadFromSheets() {
+            if (SHEETS_API_URL === 'YOUR_WEB_APP_URL_HERE') {
+                updateSyncStatus('offline', '⚠️ Configure Google Sheets URL in the code');
+                return;
+            }
+
+            try {
+                updateSyncStatus('syncing', '⏳ Loading from cloud...');
+                const response = await fetch(SHEETS_API_URL);
+                const data = await response.json();
+                
+                if (Object.keys(data).length > 0) {
+                    allData = data;
+                    localStorage.setItem('testData', JSON.stringify(allData));
+                    updateUI();
+                    updateNameDropdown();
+                    updateSyncStatus('synced', '✅ Synced with cloud');
+                } else {
+                    updateSyncStatus('synced', '✅ Connected (no data yet)');
+                }
+            } catch (error) {
+                console.error('Load error:', error);
+                updateSyncStatus('error', '❌ Failed to load from cloud');
+            }
+        }
+
+        // Save data to Google Sheets
+        async function saveToSheets() {
+            if (SHEETS_API_URL === 'YOUR_WEB_APP_URL_HERE' || isSyncing) return;
+
+            try {
+                isSyncing = true;
+                updateSyncStatus('syncing', '⏳ Syncing to cloud...');
+                
+                const response = await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(allData),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    updateSyncStatus('synced', '✅ Synced with cloud');
+                } else {
+                    updateSyncStatus('error', '❌ Sync failed');
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                updateSyncStatus('error', '❌ Sync failed');
+            } finally {
+                isSyncing = false;
+            }
+        }
+
+        function addLog(action, details) {
+            const timestamp = new Date().toLocaleString();
+            changeLog.unshift({ action, details, timestamp });
+            if (changeLog.length > 5) changeLog = changeLog.slice(0, 5);
+            localStorage.setItem('changeLog', JSON.stringify(changeLog));
+            updateChangeLog();
+        }
+
+        function updateChangeLog() {
+            const logDiv = document.getElementById('changeLog');
+            if (changeLog.length === 0) {
+                logDiv.innerHTML = '<div style="color: #a0aec0; font-size: 12px; text-align: center; padding: 20px;">No changes yet</div>';
+                return;
+            }
+            logDiv.innerHTML = changeLog.map(log => `
+                <div class="changelog-item">
+                    <strong>${log.action}</strong>: ${log.details}
+                    <div class="changelog-time">${log.timestamp}</div>
+                </div>
+            `).join('');
+        }
+
+        function addData() {
+            const nameInput = document.getElementById('friendName');
+            let name = nameInput.value.trim();
+            
+            if (!name || name === '') {
+                return alert('Please enter a name');
+            }
+
+            const subject = document.getElementById('subject').value;
+            const date = document.getElementById('testDate').value;
+            const rank = parseInt(document.getElementById('rank').value);
+            const cqMarks = parseInt(document.getElementById('cqMarks').value) || 0;
+            const mcqMarks = parseInt(document.getElementById('mcqMarks').value) || 0;
+
+            if (!date || !rank) return alert('Please fill all fields');
+
+            if (!allData[name]) allData[name] = [];
+            allData[name].push({ subject, date, rank, cqMarks, mcqMarks });
+            allData[name].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            addLog('Added', `${name} - ${subject} - Rank ${rank} (CQ: ${cqMarks}, MCQ: ${mcqMarks}) on ${date}`);
+            
+            document.getElementById('cqMarks').value = '';
+            document.getElementById('mcqMarks').value = '';
+            document.getElementById('rank').value = '';
+            nameInput.value = '';
+
+            saveAndUpdate();
+        }
+
+        function saveAndUpdate() {
+            localStorage.setItem('testData', JSON.stringify(allData));
+            updateUI();
+            updateNameDropdown();
+            saveToSheets(); // Auto-sync to cloud
+        }
+
+        function updateNameDropdown() {
+            const datalist = document.getElementById('friendNameList');
+            const names = Object.keys(allData).sort();
+            
+            // Default names
+            const defaultNames = ['AKAND', 'ATIK', 'BARUA', 'JOARDER', 'MARUF', 'SHIHAB', 'NAFIZ'];
+            const allNames = [...new Set([...defaultNames, ...names])].sort();
+            
+            datalist.innerHTML = allNames.map(name => `<option value="${name}">`).join('');
+        }
+
+        function updateUI() {
+            updateLeaderboards();
+            updateChart();
+            updateChangeLog();
+        }
+
+        function updateLeaderboards() {
+            const friendsList = document.getElementById('friendsList');
+            const avgBoard = document.getElementById('avgLeaderboard');
+            const bestBoard = document.getElementById('bestLeaderboard');
+            friendsList.innerHTML = avgBoard.innerHTML = bestBoard.innerHTML = '';
+
+            if (Object.keys(allData).length === 0) {
+                friendsList.innerHTML = '<div style="color:#999; text-align:center; padding:20px;">No data yet</div>';
+                return;
+            }
+
+            const stats = Object.keys(allData).map((name, i) => {
+                const ranks = allData[name].map(d => d.rank);
+                return { name, avg: ranks.reduce((a, b) => a + b, 0) / ranks.length, best: Math.min(...ranks), color: colors[i % colors.length] };
+            });
+
+            stats.forEach(s => {
+                friendsList.innerHTML += `<button class="friend-box-full" style="background:${s.color}" onclick="openDetails('${s.name}')">${s.name} <br> <span style="font-size:10px; font-weight:normal">Best: ${s.best} | Avg: ${Math.round(s.avg)}</span></button>`;
+            });
+
+            [...stats].sort((a,b) => a.avg - b.avg).forEach((s, i) => {
+                avgBoard.innerHTML += `<div class="stat-card-leader" style="border-left-color:${s.color}"><span class="name">#${i+1} ${s.name}</span><span class="val">Avg Rank: ${Math.round(s.avg)}</span></div>`;
+            });
+
+            [...stats].sort((a,b) => a.best - b.best).forEach((s, i) => {
+                bestBoard.innerHTML += `<div class="stat-card-leader" style="border-left-color:${s.color}"><span class="name">#${i+1} ${s.name}</span><span class="val">Best Rank: ${s.best}</span></div>`;
+            });
+        }
+
+        function updateChart() {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            if (chart) chart.destroy();
+
+            const datasets = Object.keys(allData).map((name, i) => ({
+                label: name,
+                data: allData[name].map(d => ({ 
+                    x: d.date, 
+                    y: d.rank > 20000 ? 20000 : d.rank, 
+                    realRank: d.rank, 
+                    subject: d.subject, 
+                    cqMarks: d.cqMarks,
+                    mcqMarks: d.mcqMarks,
+                    name: name 
+                })),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length],
+                tension: 0.3,
+                pointRadius: 6,
+                pointBackgroundColor: allData[name].map(d => d.rank > 20000 ? '#8B0000' : colors[i % colors.length])
+            }));
+
+            let allDates = Object.values(allData).flat().map(d => d.date).sort();
+            if(allDates.length > 0) {
+                datasets.push({
+                    label: 'Target (1500)',
+                    data: [{x: allDates[0], y: 1500}, {x: allDates[allDates.length-1], y: 1500}],
+                    borderColor: 'red', borderDash: [5, 5], pointRadius: 0, fill: false
+                });
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const activePoints = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                            const pointsData = activePoints.map(p => chart.data.datasets[p.datasetIndex].data[p.index]).filter(d => d.name);
+                            if (pointsData.length > 1) { showPointPicker(pointsData); } 
+                            else { openEdit(chart.data.datasets[elements[0].datasetIndex].label, elements[0].index); }
+                        }
+                    },
+                    scales: {
+                        y: { reverse: true, min: 0, max: 20000, title: { display: true, text: 'Rank (ABR)' }, ticks: { stepSize: 2000 } },
+                        x: { type: 'time', time: { unit: 'day' } }
+                    },
+                    plugins: { 
+                        annotation: {
+                            annotations: {
+                                targetZone: {
+                                    type: 'box',
+                                    yMin: 0,
+                                    yMax: 1500,
+                                    backgroundColor: 'rgba(211, 211, 211, 0.2)',
+                                    borderWidth: 0
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'point',
+                            intersect: true,
+                            position: 'nearest',
+                            callbacks: {
+                                title: (items) => {
+                                    const d = items[0].raw;
+                                    if (!d.name) return '';
+                                    const dateObj = new Date(d.x);
+                                    const month = dateObj.toLocaleString('en-US', { month: 'short' });
+                                    const day = dateObj.getDate();
+                                    return `${month}-${day} - ${d.subject}`;
+                                },
+                                label: (item) => {
+                                    const d = item.raw;
+                                    if (!d.name) return '';
+                                    return `Rank: ${d.realRank} | CQ: ${d.cqMarks || 0} | MCQ: ${d.mcqMarks || 0}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showPointPicker(points) {
+            const list = document.getElementById('pointList');
+            const picker = document.getElementById('multiPointSelect');
+            list.innerHTML = '';
+            points.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'point-option';
+                const total = (p.cqMarks || 0) + (p.mcqMarks || 0);
+                div.innerHTML = `<strong>${p.name}</strong> - Rank: ${p.realRank} | Sub: ${p.subject} | Total: ${total}`;
+                div.onclick = () => {
+                    const originalIndex = allData[p.name].findIndex(d => d.date === p.x && d.rank === p.realRank);
+                    openEdit(p.name, originalIndex);
+                };
+                list.appendChild(div);
+            });
+            picker.classList.remove('hidden');
+            document.getElementById('editFields').classList.add('hidden');
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function openEdit(name, index) {
+            editingRef = { name, index };
+            const entry = allData[name][index];
+            document.getElementById('editName').value = name;
+            document.getElementById('editSubject').value = entry.subject;
+            document.getElementById('editDate').value = entry.date;
+            document.getElementById('editRank').value = entry.rank;
+            document.getElementById('editCqMarks').value = entry.cqMarks || '';
+            document.getElementById('editMcqMarks').value = entry.mcqMarks || '';
+            document.getElementById('multiPointSelect').classList.add('hidden');
+            document.getElementById('editFields').classList.remove('hidden');
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function saveEdit() {
+            const entry = allData[editingRef.name][editingRef.index];
+            const oldData = JSON.stringify(entry);
+            entry.subject = document.getElementById('editSubject').value;
+            entry.date = document.getElementById('editDate').value;
+            entry.rank = parseInt(document.getElementById('editRank').value);
+            entry.cqMarks = parseInt(document.getElementById('editCqMarks').value) || 0;
+            entry.mcqMarks = parseInt(document.getElementById('editMcqMarks').value) || 0;
+            allData[editingRef.name].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            addLog('Edited', `${editingRef.name} - ${entry.subject} - Updated to Rank ${entry.rank}`);
+            
+            saveAndUpdate(); 
+            closeModal();
+        }
+
+        function deleteEntry() {
+            if(confirm("Delete this entry?")) {
+                const entry = allData[editingRef.name][editingRef.index];
+                addLog('Deleted', `${editingRef.name} - ${entry.subject} - Rank ${entry.rank} on ${entry.date}`);
+                
+                allData[editingRef.name].splice(editingRef.index, 1);
+                if(allData[editingRef.name].length === 0) delete allData[editingRef.name];
+                saveAndUpdate(); 
+                closeModal();
+            }
+        }
+
+        function sortTable(column) {
+            const tbody = document.querySelector('.details-table tbody');
+            if (!tbody) return;
+            
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const name = document.getElementById('detailsPersonName').innerText.replace("'s History", "");
+            
+            if (currentSort.column === column) {
+                currentSort.ascending = !currentSort.ascending;
+            } else {
+                currentSort.column = column;
+                currentSort.ascending = true;
+            }
+            
+            allData[name].sort((a, b) => {
+                let valA, valB;
+                switch(column) {
+                    case 'subject': valA = a.subject; valB = b.subject; break;
+                    case 'date': valA = new Date(a.date); valB = new Date(b.date); break;
+                    case 'rank': valA = a.rank; valB = b.rank; break;
+                    case 'total': 
+                        valA = (a.cqMarks || 0) + (a.mcqMarks || 0); 
+                        valB = (b.cqMarks || 0) + (b.mcqMarks || 0); 
+                        break;
+                    case 'cq': valA = a.cqMarks || 0; valB = b.cqMarks || 0; break;
+                    case 'mcq': valA = a.mcqMarks || 0; valB = b.mcqMarks || 0; break;
+                    default: return 0;
+                }
+                
+                if (valA < valB) return currentSort.ascending ? -1 : 1;
+                if (valA > valB) return currentSort.ascending ? 1 : -1;
+                return 0;
+            });
+            
+            openDetails(name);
+        }
+
+        function modalOutsideClick(e) { if (e.target.classList.contains('modal')) { closeModal(); closeDetails(); } }
+        function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+        function openDetails(name) {
+            currentSort = { column: null, ascending: true };
+            document.getElementById('detailsPersonName').innerText = name + "'s History";
+            
+            const getSortIndicator = (col) => {
+                if (currentSort.column === col) {
+                    return `<span class="sort-indicator">${currentSort.ascending ? '▲' : '▼'}</span>`;
+                }
+                return '';
+            };
+            
+            let html = `<table class="details-table">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('date')">Date${getSortIndicator('date')}</th>
+                        <th onclick="sortTable('subject')">Subject${getSortIndicator('subject')}</th>
+                        <th onclick="sortTable('rank')">Rank${getSortIndicator('rank')}</th>
+                        <th onclick="sortTable('cq')">CQ Marks${getSortIndicator('cq')}</th>
+                        <th onclick="sortTable('mcq')">MCQ Marks${getSortIndicator('mcq')}</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            
+            allData[name].forEach((d, i) => {
+                html += `<tr>
+                    <td>${d.date}</td>
+                    <td>${d.subject}</td>
+                    <td>${d.rank}</td>
+                    <td>${d.cqMarks || 0}</td>
+                    <td>${d.mcqMarks || 0}</td>
+                    <td><button onclick="event.stopPropagation(); const idx = allData['${name}'].findIndex(x => x.date === '${d.date}' && x.rank === ${d.rank} && x.subject === '${d.subject}'); openEdit('${name}', idx);" style="padding:4px 8px; background:#667eea; color:white; border-radius:4px; border:none;">Edit</button></td>
+                </tr>`;
+            });
+            
+            document.getElementById('detailsContent').innerHTML = html + '</tbody></table>';
+            document.getElementById('detailsModal').style.display = 'flex';
+        }
+        
+        function closeDetails() { document.getElementById('detailsModal').style.display = 'none'; }
+        
+        function exportData() {
+            const exportObj = { data: allData, changeLog: changeLog };
+            const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(blob); 
+            a.download = 'test-data.json'; 
+            a.click();
+            addLog('Exported', 'Data exported to file');
+        }
+        
+        function importData(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                try {
+                    const imported = JSON.parse(ev.target.result);
+                    if (imported.data) {
+                        allData = imported.data;
+                        if (imported.changeLog) changeLog = imported.changeLog;
+                    } else {
+                        allData = imported;
+                    }
+                    addLog('Imported', 'Data imported from file');
+                    saveAndUpdate(); 
+                } catch (err) {
+                    alert('Error importing file: ' + err.message);
+                }
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+        
+        // Initialize
+        document.getElementById('testDate').valueAsDate = new Date();
+        updateUI();
+        updateNameDropdown();
+        
+        // Load from sheets on startup
+        loadFromSheets();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadFromSheets, 30000);
+    </script>
+</body>
+</html>
